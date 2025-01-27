@@ -57,7 +57,7 @@ class AdaptiveAIOpponent(Fighter):
 
     def predict_move(self, player_action):
         # Use trained decision tree to predict the AI move
-        if len(self.train_data) > 0:
+        if len(self.train_data) > 5:
             # Predict the next move based on player_action
             prediction = self.model.predict([[player_action]])[0]
             return prediction
@@ -71,7 +71,7 @@ class AdaptiveAIOpponent(Fighter):
                 return 1  # Attack
 
     def update_metrics(self):
-        if len(self.history) >= 1:
+        if len(self.history) >= 5:
             y_true, y_pred = zip(*self.history)
             self.conf_matrix = confusion_matrix(y_true, y_pred, labels=[1, 2, 3])
             self.f1 = f1_score(y_true, y_pred, average="weighted")
