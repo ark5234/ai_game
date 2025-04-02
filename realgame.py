@@ -1,6 +1,7 @@
 import pygame
 import random
 from sklearn.tree import DecisionTreeClassifier
+from sklearn.ensemble import RandomForestClassifier
 from sklearn.metrics import confusion_matrix, f1_score
 import numpy as np
 
@@ -28,6 +29,10 @@ large_font = pygame.font.Font(None, 40)
 # Clock
 clock = pygame.time.Clock()
 
+# Load dataset containing possible player and AI move combinations
+dataset_path = "player_ai_moves_dataset.csv"
+df = pd.read_csv(dataset_path)
+
 # Classes
 class Fighter:
     def __init__(self, name, health, stamina, mp):
@@ -47,17 +52,28 @@ class Fighter:
 
 class AdaptiveAIOpponent(Fighter):
     def __init__(self, name):
-        super().__init__(name, 100, 100, 50)
-        self.history = []  # [(player_action, ai_action)]
+        self.name = name
+        self.health = 100
+        self.mp = 100
+        self.history = []
+        self.train_data = []
+        self.target_data = []
+        self.model = RandomForestClassifier()  # Or any AI model
         self.conf_matrix = None
         self.f1 = 0.0
-        self.model = DecisionTreeClassifier()  # Decision tree model
-        self.train_data = []  # To store player_action and ai_action pairs
-        self.target_data = []  # To store ai_action as target
+
+    def reset_metrics(self):
+        """Reset all metrics for a new game."""
+        self.history = []
+        self.train_data = []
+        self.target_data = []
+        self.conf_matrix = None
+        self.f1 = 0.0
+  # To store ai_action as target
 
     def predict_move(self, player_action):
         # Use trained decision tree to predict the AI move
-        if len(self.train_data) > 5:
+        if len(self.train_data) > 1:
             # Predict the next move based on player_action
             prediction = self.model.predict([[player_action]])[0]
             return prediction
@@ -71,10 +87,15 @@ class AdaptiveAIOpponent(Fighter):
                 return 1  # Attack
 
     def update_metrics(self):
-        if len(self.history) >= 5:
-            y_true, y_pred = zip(*self.history)
-            self.conf_matrix = confusion_matrix(y_true, y_pred, labels=[1, 2, 3])
-            self.f1 = f1_score(y_true, y_pred, average="weighted")
+        if len(self.history) > 0:
+            player_actions, ai_actions = zip(*self.history)
+            self.conf_matrix = confusion_matrix(player_actions, ai_actions, labels=[1, 2, 3])
+            self.f1 = f1_score(player_actions, ai_actions, average="weighted", zero_division=1)
+        else:
+        # No actions yet, reset metrics
+            self.conf_matrix = None
+            self.f1 = 0.0
+
 
     def train(self):
         if len(self.train_data) > 1:  # Train model after some data is collected
@@ -167,23 +188,34 @@ def battle(player, opponent):
             if event.type == pygame.KEYDOWN:
                 player_action = None
                 ai_action = None
-                if event.key == pygame.K_1 and player.mp >= 10:
-                    damage, cost = player.attack()
-                    opponent.health -= damage
-                    player.mp -= cost
-                    player_action = 1
-                    player_description = f"Player attacks and deals {damage} damage"
-                elif event.key == pygame.K_2 and player.mp >= 5:
-                    block, cost = player.defend()
-                    player.mp -= cost
-                    player_action = 2
-                    player_description = f"Player defends, reducing damage by {block}"
-                elif event.key == pygame.K_3 and player.mp >= 20:
-                    special, cost = player.special_move()
-                    opponent.health -= special
-                    player.mp -= cost
-                    player_action = 3
-                    player_description = f"Player uses special move and deals {special} damage"
+                if event.key == pygame.K_1:
+                    if player.mp >= 10:
+                        damage, cost = player.attack()
+                        opponent.health -= damage
+                        player.mp -= cost
+                        player_action = 1
+                        player_description = f"Player attacks and deals {damage} damage"
+                    else:
+                        player_description = "Not enough MP to attack!"
+
+                elif event.key == pygame.K_2:
+                    if player.mp >= 5:
+                        block, cost = player.defend()
+                        player.mp -= cost
+                        player_action = 2
+                        player_description = f"Player defends, reducing damage by {block}"
+                    else:
+                        player_description = "Not enough MP to defend!"
+
+                elif event.key == pygame.K_3:
+                    if player.mp >= 20:
+                        special, cost = player.special_move()
+                        opponent.health -= special
+                        player.mp -= cost
+                        player_action = 3
+                        player_description = f"Player uses special move and deals {special} damage"
+                    else:
+                        player_description = "Not enough MP to use special move!"
 
                 # AI's Turn
                 if player_action:
@@ -202,6 +234,8 @@ def battle(player, opponent):
                         player.health -= special
                         opponent.mp -= cost
                         ai_description = f"AI uses special move and deals {special} damage"
+                    else:
+                        ai_description = "AI has insufficient MP for any action!"
 
                     # Log actions for metrics
                     opponent.history.append((player_action, ai_action))
@@ -214,15 +248,22 @@ def battle(player, opponent):
                 # Add moves to logs
                 logs.append(f"Round {round_number}: {player_description} | {ai_description}")
 
+        # Update AI Metrics after every round
+        opponent.update_metrics()
+
         # Draw Dashboard and Restart Button
         draw_dashboard(opponent, player, player_description, ai_description, logs, probabilities)
         create_restart_button()
 
-        # Check for Restart Click
-        if pygame.mouse.get_pressed()[0]:
+        # Check for Restart Button Click
+        if pygame.mouse.get_pressed()[0]:  # Restart Button Click
             mouse_pos = pygame.mouse.get_pos()
             if 1000 <= mouse_pos[0] <= 1120 and 730 <= mouse_pos[1] <= 780:
-                return battle(Fighter("Hero", 100, 100, 50), AdaptiveAIOpponent("Adaptive AI"))
+                player = Fighter("Hero", 100, 100, 50)  # Reset player stats
+                ai = AdaptiveAIOpponent("Adaptive AI")  # Reset AI
+                ai.reset_metrics()  # Clear all AI metrics for the new game
+                return battle(player, ai)
+
 
         # Check for End Conditions
         if player.health <= 0 or opponent.health <= 0:
@@ -232,9 +273,30 @@ def battle(player, opponent):
             pygame.time.delay(3000)
             running = False
 
+        # Check if both players are out of MP
+        if player.mp <= 0 and opponent.mp <= 0:
+            display_text("Both players are out of MP! Stalemate!", 350, 300, large_font, YELLOW)
+            pygame.display.flip()
+            pygame.time.delay(3000)
+            running = False
+
         round_number += 1
         pygame.display.flip()
         clock.tick(30)
+
+    # After the game ends, display the confusion matrix and F1 score
+    screen.fill(BLACK)
+    winner = player.name if player.health > 0 else opponent.name
+    display_text(f"{winner} wins!" if player.health > 0 or opponent.health > 0 else "It's a draw!", 350, 200, large_font, YELLOW)
+
+    if opponent.conf_matrix is not None:
+        display_text("Confusion Matrix:", 350, 250, font)
+        for i, row in enumerate(opponent.conf_matrix):
+            display_text(f"{row}", 350, 280 + i * 30, font)
+    display_text(f"F1 Score: {opponent.f1:.2f}", 350, 400, font)
+    pygame.display.flip()
+    pygame.time.delay(5000)
+
 
 # Main Loop
 if __name__ == "__main__":
