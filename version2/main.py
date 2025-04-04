@@ -1,6 +1,6 @@
 # main.py
 import tkinter as tk
-from game_ui import GameUI
+from code.version2.game_ui import GameUI
 
 def main():
     root = tk.Tk()

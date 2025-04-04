@@ -1,8 +1,8 @@
 # game_ui.py
 import tkinter as tk
 from tkinter import Toplevel
-from player_ai import Player, AI
-from battle import Battle
+from code.version2.player_ai import Player, AI
+from code.version2.battle import Battle
 from sklearn.metrics import f1_score, confusion_matrix
 import numpy as np
 import random
