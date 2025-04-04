@@ -190,9 +190,21 @@ def game_over_screen(winner, player, ai):
         display_text("AI Metrics Not Available", SCREEN_WIDTH // 2 - 100, 360, font, RED)
 
     pygame.display.update()
-    pygame.time.delay(3000)  
-    pygame.quit()
-    sys.exit()
+
+    # **Wait for user input before closing**
+    waiting = True
+    while waiting:
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                pygame.quit()
+                sys.exit()
+            if event.type == pygame.KEYDOWN:
+                if event.key == pygame.K_q:  # Quit
+                    pygame.quit()
+                    sys.exit()
+                elif event.key == pygame.K_r:  # Restart
+                    battle()  # Restart the game
+                    return  # Exit function to start new game
 
 
 # Game Loop
