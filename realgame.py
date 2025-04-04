@@ -106,13 +106,14 @@ class AdaptiveAIOpponent(Fighter):
         rf_probs = self.rf_model.predict_proba(X_test)[0]
         nn_probs = self.nn_model.predict_proba(X_test)[0]
         nb_probs = self.nb_model.predict_proba(X_test)[0]
-
         # Average the confidence scores
         final_probs = (rf_probs + nn_probs + nb_probs) / 3
         best_move = np.argmax(final_probs) + 1  # Get the move with highest probability
-        
-        confidence = round(max(final_probs) * 100, 2)  # Convert to percentage
-
+        # Check if final_probs contains NaN values
+        if np.isnan(final_probs).any():
+            confidence = 33.3  # Default confidence when AI lacks training
+        else:
+            confidence = round(max(final_probs) * 100, 2)  # Convert to percentage
         return best_move, confidence
      else:
         return random.choice([1, 2, 3]), 33.3  # Default confidence
@@ -224,9 +225,15 @@ def battle():
         draw_health_bar(550, 50, ai.health)
         draw_mp_bar(50, 80, player.mp)
         draw_mp_bar(550, 80, ai.mp)
+        
 
         # Display Instructions
         display_text("Press 1: Attack | 2: Special Move | 3: Regenerate MP", 50, 120, font)
+        display_text("Move Details:", 50, 240, font, YELLOW)
+        display_text("1: Attack (MP: 10, Damage: 10-20)", 50, 260, font, WHITE)
+        display_text("2: Special Move (MP: 20, Damage: 25-35)", 50, 280, font, WHITE)
+        display_text("3: Regenerate MP (+5 MP)", 50, 300, font, WHITE)
+
 
         if game_over:
             game_over_screen(winner, player, ai)
@@ -268,7 +275,20 @@ def battle():
 
                 elif ai_move == 3:
                     ai.regenerate_mp()
+                    logs.append(f"AI regenerated MP! Current MP: {ai.mp}")
+                # AI prioritizes attacking more aggressively
+                if ai.mp >= 20:
+                    damage = ai.special_move()
+                    player.take_damage(damage)
+                    logs.append(f"AI used special move for {damage} damage!")
+                elif ai.mp >= 10:
+                    damage = ai.attack()
+                    player.take_damage(damage)
+                    logs.append(f"AI attacked for {damage} damage!")
+                else:
+                    ai.regenerate_mp()
                     logs.append("AI regenerated MP!")
+
                     
                 ai.update_metrics(player_move=max(player.move_usage, key=player.move_usage.get), ai_move=ai_move)
 
@@ -279,14 +299,14 @@ def battle():
                     player.track_result(won=False)
                     ai.track_result(won=True)
                     winner = "AI"
-                    game_over = True  # ✅ Don't exit loop—show game over screen
+                    game_over = True  # Don't exit loop—show game over screen
 
                 elif ai.health <= 0:
                     logs.append("AI is defeated!")
                     player.track_result(won=True)
                     ai.track_result(won=False)
                     winner = "Player"
-                    game_over = True  # ✅ Show game over screen
+                    game_over = True  # Show game over screen
 
         # Display Logs
         pygame.draw.rect(screen, GRAY, (50, 600, 800, 180))
