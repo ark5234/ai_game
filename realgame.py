@@ -2,11 +2,20 @@ import pygame
 import random
 import numpy as np
 import pandas as pd
+import os
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.metrics import confusion_matrix, f1_score
 from sklearn.neural_network import MLPClassifier
 from sklearn.naive_bayes import GaussianNB
 import sys
+import csv
+import time
+# CSV File
+LOG_FILE = "game_logs.csv"
+os.makedirs("logs", exist_ok=True)
+LOG_FILE = os.path.join("logs", "game_logs.csv")
+
+
 # Initialize Pygame
 pygame.init()
 
@@ -43,6 +52,8 @@ class Fighter:
         self.move_usage = {1: 0, 2: 0, 3: 0}  # Track move usage
         self.wins = 0
         self.losses = 0
+        self.total_moves = 0
+        self.successful_moves = 0
 
     def attack(self):
         """Basic attack with MP cost."""
@@ -76,7 +87,6 @@ class Fighter:
         else:
             self.losses += 1
 
-
     def take_damage(self, damage):
         """Reduce health based on damage taken."""
         self.health = max(0, self.health - damage)
@@ -96,6 +106,33 @@ class AdaptiveAIOpponent(Fighter):
         
         self.conf_matrix = None
         self.f1_score = 0.0
+
+    def load_csv_data(self):
+        if os.path.exists(LOG_FILE):
+            df = pd.read_csv(LOG_FILE)
+            if len(df) > 1:
+                self.train_data = df[["PlayerMove"]].values.tolist()
+                self.target_data = df["AIMove"].values.tolist()
+                self.train()
+
+    def train(self):
+        if len(self.train_data) > 1:
+            # Convert lists to numpy arrays for training
+            X = np.array(self.train_data)
+            y = np.array(self.target_data)
+            if len(X) > 1:
+                self.rf_model.fit(X, y)
+                self.nn_model.fit(X, y)
+                self.nb_model.fit(X, y)
+
+                y_pred = self.rf_model.predict(X)
+                if len(set(y)) > 1:
+                    self.conf_matrix = confusion_matrix(y, y_pred)
+                    self.f1_score = f1_score(y, y_pred, average="weighted", zero_division=1)
+                else:
+                    self.conf_matrix = None
+                    self.f1_score = 0.0
+
 
     def predict_move(self, player_action):
      """Predict AI's next move along with confidence score."""
@@ -117,20 +154,25 @@ class AdaptiveAIOpponent(Fighter):
         return best_move, confidence
      else:
         return random.choice([1, 2, 3]), 33.3  # Default confidence
-
-
-    def train(self):
-      """Train the AI models using collected data."""
-      if len(self.train_data) > 1:
-        X = np.array(self.train_data)
-        y = np.array(self.target_data)
-
-        # Train models
-        self.rf_model.fit(X, y)
-        self.nn_model.fit(X, y)
-        self.nb_model.fit(X, y)
-
-        print("AI Models trained successfully!")  # Debugging)
+    
+    def update_metrics_and_log(self, round_num, player_move, ai_move, player_dmg, ai_dmg, player_mp_used, ai_mp_used):
+        self.train_data.append([player_move])
+        self.target_data.append(ai_move)
+        self.train()
+        # Append to CSV
+        new_row = pd.DataFrame([{
+            "Round": round_num,
+            "PlayerMove": player_move,
+            "AIMove": ai_move,
+            "PlayerDamage": player_dmg,
+            "AIDamage": ai_dmg,
+            "PlayerMPUsed": player_mp_used,
+            "AIMPUsed": ai_mp_used
+        }])
+        if not os.path.exists(LOG_FILE):
+            new_row.to_csv(LOG_FILE, index=False)
+        else:
+            new_row.to_csv(LOG_FILE, mode='a', header=False, index=False)
 
     def update_metrics(self, player_move, ai_move):
      """Update AI performance metrics (Confusion Matrix & F1 Score)."""
@@ -180,7 +222,7 @@ def game_over_screen(winner, player, ai):
     display_text("Final Statistics", SCREEN_WIDTH // 2 - 120, 260, large_font, WHITE)
     display_text(f"Total Damage Dealt: {player.total_damage}", SCREEN_WIDTH // 2 - 100, 300, font, GREEN)
     display_text(f"Most Used Move: {max(player.move_usage, key=player.move_usage.get)}", SCREEN_WIDTH // 2 - 100, 330, font, GREEN)
-
+    
     # Display AI Metrics
     if ai.conf_matrix is not None:
         display_text(f"AI F1 Score: {round(ai.f1_score, 2)}", SCREEN_WIDTH // 2 - 100, 360, font, BLUE)
@@ -191,6 +233,7 @@ def game_over_screen(winner, player, ai):
         display_text("AI Metrics Not Available", SCREEN_WIDTH // 2 - 100, 360, font, RED)
 
     pygame.display.update()
+    pygame.time.wait(3000)
 
     # **Wait for user input before closing**
     waiting = True
@@ -212,12 +255,16 @@ def game_over_screen(winner, player, ai):
 def battle():
     player = Fighter("Player")
     ai = AdaptiveAIOpponent("AI")
+    ai.load_csv_data()  # Load previous game logs
     logs = []
     running = True
     game_over = False
     winner = ""
 
-    while running:
+    ai_confidence = 0.0  # Default confidence
+    player_confidence = 0.0  # Default confidence
+
+    while True:
         screen.fill(BLACK)
 
         # Draw health bars
@@ -225,7 +272,13 @@ def battle():
         draw_health_bar(550, 50, ai.health)
         draw_mp_bar(50, 80, player.mp)
         draw_mp_bar(550, 80, ai.mp)
-        
+
+        if player.total_moves > 0:
+            player_confidence = (player.successful_moves / player.total_moves) * 100
+        else:
+            player_confidence = 0.0  # Default when no moves made yet
+
+    
 
         # Display Instructions
         display_text("Press 1: Attack | 2: Special Move | 3: Regenerate MP", 50, 120, font)
@@ -233,6 +286,10 @@ def battle():
         display_text("1: Attack (MP: 10, Damage: 10-20)", 50, 260, font, WHITE)
         display_text("2: Special Move (MP: 20, Damage: 25-35)", 50, 280, font, WHITE)
         display_text("3: Regenerate MP (+5 MP)", 50, 300, font, WHITE)
+        display_text(f"AI Confidence: {ai_confidence}%", 550, 150, font, WHITE)
+        display_text(f"Player Confidence: {player_confidence}%", 550, 170, font, WHITE)
+
+
 
 
         if game_over:
@@ -249,17 +306,26 @@ def battle():
                 if event.key == pygame.K_1 and player.mp >= 10:
                     damage = player.attack()
                     ai.take_damage(damage)
+                    player_move = 1
+                    player.total_moves += 1
+                    if damage > 0:
+                        player.successful_moves += 1
                     logs.append(f"Player attacked for {damage} damage!")
 
                 elif event.key == pygame.K_2 and player.mp >= 20:
                     damage = player.special_move()
                     ai.take_damage(damage)
+                    player_move = 2
+                    player.total_moves += 1
+                    if damage > 0:
+                        player.successful_moves += 1
                     logs.append(f"Player used special move for {damage} damage!")
 
                 elif event.key == pygame.K_3:
                     player.regenerate_mp()
+                    player_move = 3
                     logs.append("Player regenerated MP!")
-
+                    
                 # AI Move
                 ai_move, ai_confidence = ai.predict_move(random.choice([1, 2, 3]))
                 logs.append(f"AI chose move {ai_move} with {ai_confidence}% confidence!")
@@ -291,6 +357,16 @@ def battle():
 
                     
                 ai.update_metrics(player_move=max(player.move_usage, key=player.move_usage.get), ai_move=ai_move)
+                # Update AI learning
+                ai.update_metrics_and_log(
+                        round_num=len(logs) + 1,
+                        player_move=player_move,
+                        ai_move=ai_move,
+                        player_dmg=player.total_damage,
+                        ai_dmg=ai.total_damage,
+                        player_mp_used=player.mp,
+                        ai_mp_used=ai.mp,
+                    )
 
 
                 # **Check for Game Over**
