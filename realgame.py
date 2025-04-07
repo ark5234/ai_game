@@ -384,7 +384,7 @@ def battle():
                     player_mp_used=10 if player_move == 1 else 20 if player_move == 2 else 0,
                     ai_mp_used=10 if ai_move == 1 else 20 if ai_move == 2 else 0
                 )
-                # Update Player and AI confidence
+                
 
 
                 # **Check for Game Over**
