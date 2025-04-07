@@ -6,6 +6,7 @@ import os
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.metrics import confusion_matrix, f1_score
 from sklearn.neural_network import MLPClassifier
+from sklearn.metrics import classification_report
 from sklearn.naive_bayes import GaussianNB
 import sys
 import csv
@@ -14,6 +15,7 @@ import time
 LOG_FILE = "game_logs.csv"
 os.makedirs("logs", exist_ok=True)
 LOG_FILE = os.path.join("logs", "game_logs.csv")
+
 
 
 # Initialize Pygame
@@ -56,7 +58,7 @@ class Fighter:
         self.successful_moves = 0
 
     def attack(self):
-        """Basic attack with MP cost."""
+        
         if self.mp >= 10:
             damage = random.randint(10, 20)
             self.mp -= 10
@@ -66,7 +68,7 @@ class Fighter:
         return 0
 
     def special_move(self):
-        """Special move with higher damage and MP cost."""
+        
         if self.mp >= 20:
             damage = random.randint(25, 35)
             self.mp -= 20
@@ -76,19 +78,19 @@ class Fighter:
         return 0
 
     def regenerate_mp(self):
-        """Regenerate MP gradually every round."""
+        
         self.mp = min(self.mp + 5, self.max_mp)
         self.move_usage[3] += 1  # Track move usage
 
     def track_result(self, won):
-        """Track win/loss results."""
+        
         if won:
             self.wins += 1
         else:
             self.losses += 1
 
     def take_damage(self, damage):
-        """Reduce health based on damage taken."""
+        
         self.health = max(0, self.health - damage)
 
 
@@ -135,25 +137,21 @@ class AdaptiveAIOpponent(Fighter):
 
 
     def predict_move(self, player_action):
-     """Predict AI's next move along with confidence score."""
-     if len(self.train_data) > 1:
-        X_test = np.array([[player_action]])
+        if len(self.train_data) > 1:
+            X_test = np.array([[player_action]])
         
         # Get prediction probabilities
-        rf_probs = self.rf_model.predict_proba(X_test)[0]
-        nn_probs = self.nn_model.predict_proba(X_test)[0]
-        nb_probs = self.nb_model.predict_proba(X_test)[0]
+            rf_probs = self.rf_model.predict_proba(X_test)[0]
+            nn_probs = self.nn_model.predict_proba(X_test)[0]
+            nb_probs = self.nb_model.predict_proba(X_test)[0]
         # Average the confidence scores
-        final_probs = (rf_probs + nn_probs + nb_probs) / 3
-        best_move = np.argmax(final_probs) + 1  # Get the move with highest probability
-        # Check if final_probs contains NaN values
-        if np.isnan(final_probs).any():
-            confidence = 33.3  # Default confidence when AI lacks training
+            final_probs = (rf_probs + nn_probs + nb_probs) / 3
+            best_move = np.argmax(final_probs) + 1  # Get the move with highest probability
+        
+            confidence = round(max(final_probs) * 100, 2) if not np.isnan(final_probs).any() else 33.3
+            return best_move, confidence
         else:
-            confidence = round(max(final_probs) * 100, 2)  # Convert to percentage
-        return best_move, confidence
-     else:
-        return random.choice([1, 2, 3]), 33.3  # Default confidence
+            return random.choice([1, 2, 3]), 33.3  
     
     def update_metrics_and_log(self, round_num, player_move, ai_move, player_dmg, ai_dmg, player_mp_used, ai_mp_used):
         self.train_data.append([player_move])
@@ -175,7 +173,7 @@ class AdaptiveAIOpponent(Fighter):
             new_row.to_csv(LOG_FILE, mode='a', header=False, index=False)
 
     def update_metrics(self, player_move, ai_move):
-     """Update AI performance metrics (Confusion Matrix & F1 Score)."""
+     
      self.train_data.append([player_move])  # Store player's move
      self.target_data.append(ai_move)  # Store AI's move
 
@@ -216,7 +214,7 @@ def calculate_probabilities(player, opponent):
 
 
 def game_over_screen(winner, player, ai):
-    """Displays game-over screen with AI statistics."""
+   
     screen.fill(BLACK)
     display_text(f"{winner} Wins!", SCREEN_WIDTH // 2 - 100, 200, large_font, YELLOW)
     display_text("Final Statistics", SCREEN_WIDTH // 2 - 120, 260, large_font, WHITE)
@@ -235,7 +233,7 @@ def game_over_screen(winner, player, ai):
     pygame.display.update()
     pygame.time.wait(3000)
 
-    # **Wait for user input before closing**
+    # Ask for replay or quit
     waiting = True
     while waiting:
         for event in pygame.event.get():
@@ -246,9 +244,9 @@ def game_over_screen(winner, player, ai):
                 if event.key == pygame.K_q:  # Quit
                     pygame.quit()
                     sys.exit()
-                elif event.key == pygame.K_r:  # Restart
-                    battle()  # Restart the game
-                    return  # Exit function to start new game
+                elif event.key == pygame.K_r: 
+                    battle()  
+                    return  
 
 
 # Game Loop
@@ -301,83 +299,103 @@ def battle():
             if event.type == pygame.QUIT:
                 pygame.quit()
                 return
-
             if event.type == pygame.KEYDOWN:
+                player_dmg = 0
+                ai_dmg = 0
+                player_mp_used = 0
+                ai_mp_used = 0
+
                 if event.key == pygame.K_1 and player.mp >= 10:
-                    damage = player.attack()
-                    ai.take_damage(damage)
+                    player_dmg = player.attack()
+                    ai.take_damage(player_dmg)
                     player_move = 1
                     player.total_moves += 1
-                    if damage > 0:
+                    if player_dmg > 0:
                         player.successful_moves += 1
-                    logs.append(f"Player attacked for {damage} damage!")
+                    logs.append(f"Player attacked for {player_dmg} damage!")
 
                 elif event.key == pygame.K_2 and player.mp >= 20:
-                    damage = player.special_move()
-                    ai.take_damage(damage)
+                    player_damage = player.special_move()
+                    ai.take_damage(player_damage)
                     player_move = 2
                     player.total_moves += 1
-                    if damage > 0:
+                    if player_damage > 0:
                         player.successful_moves += 1
-                    logs.append(f"Player used special move for {damage} damage!")
+                    logs.append(f"Player used special move for {player_damage} damage!")
 
                 elif event.key == pygame.K_3:
                     player.regenerate_mp()
                     player_move = 3
                     logs.append("Player regenerated MP!")
+                else:
+                    continue
                     
                 # AI Move
-                ai_move, ai_confidence = ai.predict_move(random.choice([1, 2, 3]))
-                logs.append(f"AI chose move {ai_move} with {ai_confidence}% confidence!")
-                if ai_move == 1:
-                    damage = ai.attack()
-                    player.take_damage(damage)
-                    logs.append(f"AI attacked for {damage} damage!")
+                ai_move, ai_confidence = ai.predict_move(player_move)
 
-                elif ai_move == 2:
-                    damage = ai.special_move()
-                    player.take_damage(damage)
-                    logs.append(f"AI used special move for {damage} damage!")
 
-                elif ai_move == 3:
-                    ai.regenerate_mp()
-                    logs.append(f"AI regenerated MP! Current MP: {ai.mp}")
-                # AI prioritizes attacking more aggressively
-                if ai.mp >= 20:
-                    damage = ai.special_move()
-                    player.take_damage(damage)
-                    logs.append(f"AI used special move for {damage} damage!")
-                elif ai.mp >= 10:
-                    damage = ai.attack()
-                    player.take_damage(damage)
-                    logs.append(f"AI attacked for {damage} damage!")
+                if player.health <= 20 and ai.mp >= 20:
+                    ai_move = 2
+                    ai_confidence = 100.0
+                elif ai.health < player.health and ai.mp >= 10:
+  
+                    ai_move = 1 if ai.mp < 20 else 2
+                    ai_confidence = 90.0
                 else:
+                    ai_move = 3  # Regenerate
                     ai.regenerate_mp()
                     logs.append("AI regenerated MP!")
 
+                ai_dmg=0
+                if ai_move == 1:
+                    ai_dmg = ai.attack()
+                    player.take_damage(ai_dmg)
+                    logs.append(f"AI attacked for {ai_dmg} damage!")
+
+                elif ai_move == 2:
+                    ai_dmg = ai.special_move()
+                    player.take_damage(ai_dmg)
+                    logs.append(f"AI used special move for {ai_dmg} damage!")
+                
+                logs.append(f"AI chose move {ai_move} with {ai_confidence}% confidence!")
+                
+                ai_last_damage = 0
+                if ai_move == 1:
+                    ai_last_damage = ai.attack()
+                    player.take_damage(ai_last_damage)
+                    logs.append(f"AI attacked for {ai_last_damage} damage!")
+                elif ai_move == 2:
+                    ai_last_damage = ai.special_move()
+                    player.take_damage(ai_last_damage)
+                    logs.append(f"AI used special move for {ai_last_damage} damage!")
+                elif ai_move == 3:
+                    ai.regenerate_mp()
+                    logs.append(f"AI regenerated MP!")
+
+                logs.append(f"AI MP after move: {ai.mp}")
                     
-                ai.update_metrics(player_move=max(player.move_usage, key=player.move_usage.get), ai_move=ai_move)
-                # Update AI learning
+                ai.update_metrics(player_move=player_move, ai_move=ai_move)
                 ai.update_metrics_and_log(
-                        round_num=len(logs) + 1,
-                        player_move=player_move,
-                        ai_move=ai_move,
-                        player_dmg=player.total_damage,
-                        ai_dmg=ai.total_damage,
-                        player_mp_used=player.mp,
-                        ai_mp_used=ai.mp,
-                    )
+                    round_num=len(logs) + 1,
+                    player_move=player_move,
+                    ai_move=ai_move,
+                    player_dmg=player_dmg,
+                    ai_dmg=ai_dmg,
+                    player_mp_used=10 if player_move == 1 else 20 if player_move == 2 else 0,
+                    ai_mp_used=10 if ai_move == 1 else 20 if ai_move == 2 else 0
+                )
+                # Update Player and AI confidence
 
 
                 # **Check for Game Over**
-                if player.health <= 0:
+            if player.health <= 0:
                     logs.append("Player is defeated!")
                     player.track_result(won=False)
                     ai.track_result(won=True)
                     winner = "AI"
                     game_over = True  # Don't exit loop—show game over screen
 
-                elif ai.health <= 0:
+            elif ai.health <= 0:
                     logs.append("AI is defeated!")
                     player.track_result(won=True)
                     ai.track_result(won=False)
@@ -388,14 +406,14 @@ def battle():
         pygame.draw.rect(screen, GRAY, (50, 600, 800, 180))
         display_text("Live Log", 60, 610, font, BLACK)
         for i, log in enumerate(logs[-5:]):  # Show last 5 moves
-            display_text(log, 60, 640 + i * 20, font, BLACK)
+            display_text(log, 50, 3500 + i * 20, font, BLACK)
 
         # Display Player Stats
         display_text(f"Total Damage Dealt: {player.total_damage}", 50, 160, font)
         display_text(f"Win/Loss: {player.wins}/{player.losses}", 50, 180, font)
         display_text(f"Most Used Move: {max(player.move_usage, key=player.move_usage.get)}", 50, 200, font)
 
-        pygame.display.update()
+        pygame.display.flip()
         clock.tick(30)
 
 # Run Game
