@@ -1,0 +1,24 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.egg-info/
+dist/
+build/
+.eggs/
+.venv/
+venv/
+env/
+
+# Generated outputs (keep directory structure but not generated files)
+outputs/*.png
+outputs/*.json
+outputs/*.csv
+logs/*.csv
+logs/*.jsonl
+profiles/*.json
+
+# Keep gitkeep placeholder files
+!outputs/.gitkeep
+!logs/.gitkeep
+!profiles/.gitkeep

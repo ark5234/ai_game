@@ -1,182 +1,147 @@
-# AI-Powered Fighting Game with Adaptive Learning
+# AI Fighting Game — v2.0
 
-An intelligent Python-based fighting game where an AI opponent **learns from past battles**, adapts its strategy over time, and challenges the player using real-time predictions. The system integrates **machine learning**, **persistent gameplay logging**, and **in-depth analytics** to create an evolving, competitive experience.
-
----
-
-## Objective
-
-To design a turn-based fighting game that features an **AI agent capable of improving over time** using historical battle data. The game focuses on:
-
-- Real-time move prediction using ensemble models
-- Continuous learning from past battles (CSV logging)
-- Detailed post-game analytics and performance visualization
+An intelligent Python-based turn-based fighting game where an AI opponent **learns from past battles**, adapts its strategy using an ensemble ML model with **confidence-weighted voting**, and now features a full **Pygame GUI**, **persistent player profiles**, **per-round damage tracking with plots**, and an optional **reinforcement learning (Q-learning) agent**.
 
 ---
 
-## Gameplay Overview
+## Quick Start
 
-- Each round: Player selects a move (Attack, Defend, Special)
-- The AI:
-  - Predicts player's likely move using trained ML models
-  - Responds with the best possible counter-move
-- Actions consume MP and inflict damage based on predefined rules
-- Battle continues for multiple rounds until health depletes
+### Installation
+
+```bash
+pip install -r requirements.txt
+```
+
+### Run GUI (Pygame)
+```bash
+python -m ai_game.gui
+```
+
+### Run CLI / Headless
+```bash
+python -m ai_game.cli --profile YourName
+python -m ai_game.cli --profile YourName --rl   # use RL agent
+```
+
+### Train / Evaluate RL Agent
+```bash
+python -m ai_game.train_rl --episodes 2000
+python -m ai_game.train_rl --eval --eval-episodes 200
+```
+
+---
+
+## Repository Structure
+
+```
+ai_game/                  # Main Python package
+├── __init__.py
+├── __main__.py           # `python -m ai_game` — usage help
+├── gui.py                # Pygame GUI entry point
+├── cli.py                # CLI / headless entry point
+├── train_rl.py           # RL training & evaluation
+├── fighter.py            # Fighter base class
+├── ai_opponent.py        # Adaptive ML AI (ensemble + confidence-weighted voting)
+├── rl_env.py             # Gymnasium-compatible environment (FightEnv)
+├── rl_agent.py           # Tabular Q-learning agent
+├── battle_engine.py      # Headless battle logic (shared by GUI and CLI)
+├── profiles.py           # Per-player profile persistence (JSON)
+├── damage_tracker.py     # Per-round tracking (CSV + JSONL)
+└── visualize.py          # Matplotlib plots (outputs/)
+profiles/                 # JSON player profiles (auto-created)
+logs/                     # Match logs: game_logs.csv, match_*.csv, match_*.jsonl
+outputs/                  # Plot images (PNG)
+requirements.txt
+```
+
+---
+
+## Feature Details
+
+### 1. Player Profiles (Persistent Performance Tracking)
+- Profiles are stored as `profiles/<name>.json`.
+- Tracked stats: games played, wins/losses, total damage dealt/taken, total moves, move usage counts, last played timestamp.
+- Create or select a profile in the GUI main menu, or pass `--profile NAME` in CLI mode.
+- Updated automatically at the end of every match.
+
+### 2. Per-Round Damage Tracking & Visualisation
+- Every round is logged to `logs/game_logs.csv` (global) and `logs/match_<id>.csv` / `logs/match_<id>.jsonl` (per match).
+- Fields: round_num, player_move, ai_move, player_damage, ai_damage, HP/MP after & delta, ai_confidence, timestamp.
+- After each match, two Matplotlib plots are saved to `outputs/`:
+  - `damage_per_round_<id>.png` — grouped bar chart
+  - `cumulative_damage_<id>.png` — cumulative line chart
+- In the GUI, use the **"Generate Plots"** button on the end screen.
+- From code:
+  ```python
+  from ai_game.visualize import plot_damage_per_round, plot_cumulative_damage
+  plot_damage_per_round("<match_id>")
+  ```
+
+### 3. Ensemble Learning with Confidence-Weighted Voting
+- Models: RandomForestClassifier, MLPClassifier, GaussianNB.
+- Each model's vote is weighted by its **maximum predicted probability** (`predict_proba`).
+- Final move = `argmax(Σ weight_i × proba_i)`.
+- Per-model and ensemble confidences are logged each round and shown in the GUI/CLI.
+
+### 4. Pygame GUI
+- **Main Menu**: create/select profile, toggle ML vs RL AI, start game, view stats.
+- **In-Game**: HP/MP bars for both fighters, ensemble confidence display, scrolling battle log, on-screen move buttons (also mapped to keys 1/2/3).
+- **End Screen**: winner announcement, damage summary, "Generate Plots" button.
+- **Stats Screen**: full per-profile statistics.
+
+### 5. Reinforcement Learning Agent (Q-Learning)
+#### MDP Definition
+
+| Component       | Details |
+|-----------------|---------|
+| **Agent**       | Tabular Q-learning policy |
+| **Environment** | `FightEnv` (Gymnasium-compatible) |
+| **State space** | `MultiDiscrete([5, 5, 5, 5, 4])` — agent HP bin, agent MP bin, opp HP bin, opp MP bin, last opponent move |
+| **Action space**| `Discrete(3)` — 0=Attack, 1=Regen, 2=Special |
+| **Reward**      | `(dmg_dealt − dmg_taken) / 35 × 0.5` per step; `+1.0` win, `−1.0` loss |
+| **Termination** | HP reaches 0 or 50 rounds elapsed |
+
+#### Algorithm & Hyperparameters
+
+| Parameter | Default |
+|-----------|---------|
+| Learning rate α | 0.1 |
+| Discount factor γ | 0.95 |
+| Initial ε | 1.0 |
+| Minimum ε | 0.05 |
+| ε decay | 0.995 per episode |
+
+#### Persistence
+- Q-table saved to `outputs/qtable.json` after training.
+- Training reward curve saved to `outputs/rl_training_rewards.png`.
+- Use `--rl` flag in GUI or CLI to play against the trained RL agent.
 
 ---
 
 ## Tech Stack
 
-| Area              | Technology Used                            |
+| Area              | Technology                                  |
 |-------------------|---------------------------------------------|
-| Language          | Python 3.x                                  |
-| ML Models         | Random Forest, MLPClassifier, Naive Bayes   |
-| Data Storage      | CSV (Pandas)                                |
-| Visualization     | Matplotlib, Seaborn                         |
-| Evaluation        | Confusion Matrix, Classification Report     |
-| UI                | Console-based with future GUI expansion     |
+| Language          | Python 3.10+                                |
+| ML Models         | RandomForest, MLPClassifier, GaussianNB     |
+| RL Algorithm      | Tabular Q-learning                          |
+| RL Environment    | Gymnasium                                   |
+| Data Storage      | CSV, JSONL, JSON (Pandas)                   |
+| Visualisation     | Matplotlib, Seaborn                         |
+| GUI               | Pygame                                      |
 
 ---
-```
-## 🧠 AI System Architecture
 
+## Evaluation
 
- ┌────────────────────────────┐
- │       Player Move          │
- └────────────┬───────────────┘
-              ▼
- ┌────────────────────────────┐
- │  CSV Logger (game_logs.csv)│
- └────────────┬───────────────┘
-              ▼
- ┌────────────────────────────┐
- │  Ensemble ML Model Trainer │ <── Historical Logs
- └────────────┬───────────────┘
-              ▼
- ┌────────────────────────────┐
- │   AI Move Prediction Logic │ ──► Decision Based on Confidence Score
- └────────────┬───────────────┘
-              ▼
- ┌────────────────────────────┐
- │    Game Battle Engine      │
- └────────────────────────────┘
-
-
-ai_game/
-├── code/
-│   ├── game.py              # Core battle loop and player interaction
-│   ├── ai_model.py          # AI training and ensemble prediction
-│   ├── logger.py            # Logging each round to CSV
-│   ├── matrix.py            # Post-game analysis and metrics
-├── logs/
-│   └── game_logs.csv        # Persistent game log for training
-├── README.md
-├── requirements.txt         # Python package requirements
+After training for 1 000 episodes the RL agent is evaluated in greedy mode:
 
 ```
-## Features:
-# Core Gameplay
-
--Turn-based system with 3 move types:
-
-        1 = Attack
-
-        2 = Defend
-
-        3 = Special
-
--Health and MP management
-
--Damage is calculated dynamically
-
-Analytics & Statistics:
-
--Confusion Matrix between:
-
--True PlayerMove vs AI Prediction (ML)
-
--True PlayerMove vs Actual AIMove (In-Game)
-
--F1 Score, Precision, Recall, and Accuracy
-
--Heatmaps of move performance
-
--Most used moves, damage dealt, and win ratio
-
-## Machine Learning Highlights:
-
--Uses ensemble voting (Random Forest + MLP + Naive Bayes)
-
--Predicts the next likely PlayerMove and counters accordingly
-
--Learns continuously from past games via a persistent CSV
-
--Improves as more rounds are logged
-
-## Installation
-```
-Clone this repo:
-git clone https://github.com/your-username/ai-fighting-game.git
-cd ai-fighting-game
-
-Install dependencies:
-pip install -r requirements.txt
-
-Run the game:
-python code/game.py
+python -m ai_game.train_rl --episodes 1000 --eval-episodes 200
 ```
 
-## Run analytics:
-
-Sample game_logs.csv Format
+Example output:
 ```
-Round	PlayerMove	AIMove	PlayerDamage	AIDamage	PlayerMPUsed	AIMPUsed	Result	ConfidenceScore
-1	        1	        3	          20	       10	        5	            3	      Win	      0.85
-Result = Win/Loss/Draw (can be used for future model scoring)
-
-ConfidenceScore shows how confident the AI was in its prediction
-
-Example Outputs (from matrix.py)
-Confusion Matrix (ML Model Prediction)
-True → / Predicted ↓	Attack	Defend	Special
-Attack	12	3	1
-Defend	2	15	2
-Special	0	4	13
-Classification Report:
-
-              precision    recall  f1-score   support
-     1           0.80       0.75      0.77        16
-     2           0.79       0.83      0.81        18
-     3           0.85       0.80      0.82        17
-
+Win rate  : 120/200 (60.0%)
+Mean reward: 0.312 ± 0.581
 ```
-## Future Improvements
-
-    Add player profiles for persistent performance tracking
-
-    Track and visualize damage dealt per round
-
-    Implement ensemble learning with confidence-weighted votes
-
-    Upgrade to GUI with Pygame or Tkinter
-
-    Add reinforcement learning for real-time adaptation
-
-
-## License
-This project is licensed under the MIT License. Feel free to use it for learning, teaching, or building your own intelligent game agents.
-
-## Acknowledgements
-Special thanks to all open-source tools and ML libraries used in this project.
-
-Author
-```
-Vikrant
-AI Developer | Data Science Enthusiast | Game Architect
-Contact: vikarantkawadkar2099@gmail.com
-```
-
-“Games are the most elevated form of investigation.” — Albert Einstein
-
-
----
