@@ -196,7 +196,7 @@ def main():
                 col = GREEN if pname == st.selected_profile else DGRAY
                 r = pygame.Rect(80 + i * 145, 280, 135, 34)
                 pygame.draw.rect(screen, col, r, border_radius=6)
-                _txt(screen, pname[:14], 86 + i * 145, 289, f_sm)
+                _txt(screen, pname[:14], 86 + i * 145, 289, f_sm, WHITE)
                 prof_rects.append((r, pname))
 
             # AI toggle
