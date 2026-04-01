@@ -118,6 +118,15 @@ def main():
     st = _State()
     st.use_rl = args.rl
 
+    try:
+        bg_img = pygame.image.load("assets/bg.jpg").convert()
+        bg_img = pygame.transform.scale(bg_img, (W, H))
+        player_img = pygame.image.load("assets/player.png").convert_alpha()
+        ai_img = pygame.image.load("assets/ai.png").convert_alpha()
+    except Exception as e:
+        print("Images not found:", e)
+        bg_img, player_img, ai_img = None, None, None
+
     # ------------------------------------------------------------------
     def new_game():
         st.logs = []
@@ -160,7 +169,10 @@ def main():
     # ------------------------------------------------------------------
     running = True
     while running:
-        screen.fill(BLACK)
+        if st.screen == "game" and bg_img:
+            screen.blit(bg_img, (0, 0))
+        else:
+            screen.fill(BLACK)
         mx, my = pygame.mouse.get_pos()
         events = pygame.event.get()
 
@@ -269,6 +281,11 @@ def main():
             ai_lbl = "[RL AI]" if st.use_rl else "[ML Ensemble]"
             _txt(screen, ai_lbl, W - 140, 18, f_sm, GRAY)
 
+            # Display characters
+            if player_img and ai_img:
+                screen.blit(player_img, (100, 360))
+                screen.blit(ai_img, (W - 250, 360))
+
             # Player bars
             _txt(screen, p.name, 40, 52, f_md, GREEN)
             _bar(screen, 40, 78, 340, 22, p.health, 100, GREEN)
@@ -293,7 +310,10 @@ def main():
                 _txt(screen, ctxt, W // 2, 132, f_sm, GRAY, center=True)
 
             # Battle log
-            pygame.draw.rect(screen, DGRAY, (40, 155, W - 80, 395), border_radius=6)
+            s = pygame.Surface((W - 80, 395), pygame.SRCALPHA)
+            s.fill((50, 50, 50, 180))  # Semi-transparent dark gray
+            pygame.draw.rect(s, DGRAY, s.get_rect(), 2, border_radius=6)
+            screen.blit(s, (40, 155))
             _txt(screen, "Battle Log", 55, 162, f_sm, GRAY)
             for i, entry in enumerate(st.logs[-16:]):
                 col = YELLOW if "defeated" in entry.lower() else WHITE
@@ -380,6 +400,15 @@ def main():
                         p1 = plot_damage_per_round(st.tracker.match_id)
                         p2 = plot_cumulative_damage(st.tracker.match_id)
                         st.end_plots = [p for p in (p1, p2) if p]
+                        import platform
+                        import subprocess
+                        for p in st.end_plots:
+                            if platform.system() == 'Windows':
+                                os.startfile(p)
+                            elif platform.system() == 'Darwin':
+                                subprocess.call(('open', p))
+                            else:
+                                subprocess.call(('xdg-open', p))
 
                     if r_replay.collidepoint(mx, my):
                         new_game()
